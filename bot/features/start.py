@@ -8,5 +8,4 @@ async def start(update, context):
         update,
         "👋 Welcome.\n\n"
         "Use /start_sft for SFT reporting or /start_movement for movement reporting.\n"
-        "Use /debug_ids to view your Telegram IDs for setup/debugging.",
     )
