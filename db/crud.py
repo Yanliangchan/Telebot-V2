@@ -1,10 +1,38 @@
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import func
 
 from db.database import SessionLocal, session_scope
-from db.models import MedicalEvent, MedicalStatus, SFTSession, SFTSubmission, User
+from db.models import AdminApproval, MedicalEvent, MedicalStatus, MovementLog, SFTSession, SFTSubmission, User
 from utils.datetime_utils import SG_TZ, now_sg
+
+
+CLEAR_DATABASE_ACTION = "CLEAR_DATABASE"
+
+
+def register_clear_database_approval(admin_telegram_id: int, window_minutes: int = 10) -> int:
+    cutoff = now_sg() - timedelta(minutes=window_minutes)
+    with session_scope() as session:
+        session.query(AdminApproval).filter(AdminApproval.action == CLEAR_DATABASE_ACTION, AdminApproval.created_at < cutoff).delete(synchronize_session=False)
+        existing = session.query(AdminApproval).filter(
+            AdminApproval.action == CLEAR_DATABASE_ACTION,
+            AdminApproval.admin_telegram_id == admin_telegram_id,
+        ).first()
+        if existing:
+            existing.created_at = now_sg()
+        else:
+            session.add(AdminApproval(action=CLEAR_DATABASE_ACTION, admin_telegram_id=admin_telegram_id))
+        session.flush()
+        count = session.query(func.count(func.distinct(AdminApproval.admin_telegram_id))).filter(
+            AdminApproval.action == CLEAR_DATABASE_ACTION,
+            AdminApproval.created_at >= cutoff,
+        ).scalar()
+        return int(count or 0)
+
+
+def clear_database_approvals() -> None:
+    with session_scope() as session:
+        session.query(AdminApproval).filter(AdminApproval.action == CLEAR_DATABASE_ACTION).delete(synchronize_session=False)
 
 
 def get_user_by_telegram_id(telegram_id: int):
@@ -72,6 +100,24 @@ def clear_user_data() -> dict[str, int]:
         events_deleted = session.query(MedicalEvent).delete(synchronize_session=False)
         users_deleted = session.query(User).delete(synchronize_session=False)
     return {
+        "medical_statuses": statuses_deleted,
+        "medical_events": events_deleted,
+        "users": users_deleted,
+    }
+
+
+def clear_all_data() -> dict[str, int]:
+    with session_scope() as session:
+        submissions_deleted = session.query(SFTSubmission).delete(synchronize_session=False)
+        sessions_deleted = session.query(SFTSession).delete(synchronize_session=False)
+        movement_logs_deleted = session.query(MovementLog).delete(synchronize_session=False)
+        statuses_deleted = session.query(MedicalStatus).delete(synchronize_session=False)
+        events_deleted = session.query(MedicalEvent).delete(synchronize_session=False)
+        users_deleted = session.query(User).delete(synchronize_session=False)
+    return {
+        "sft_submissions": submissions_deleted,
+        "sft_sessions": sessions_deleted,
+        "movement_logs": movement_logs_deleted,
         "medical_statuses": statuses_deleted,
         "medical_events": events_deleted,
         "users": users_deleted,

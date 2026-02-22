@@ -6,14 +6,28 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from bot.helpers import reply
 from bot.shared.state import reset_session
 from config.constants import MAX_IMPORT_CSV_SIZE_BYTES
-from db.crud import clear_user_data, list_users
+from db.crud import (
+    clear_all_data,
+    clear_database_approvals,
+    clear_user_data,
+    list_users,
+    register_clear_database_approval,
+)
 from db.import_users_csv import import_users
 from services.auth_service import is_admin_user
 from utils.rate_limiter import user_rate_limiter
 
+CLEAR_CONFIRM_WINDOW_MINUTES = 10
+
 
 def _is_admin(user_id: int | None) -> bool:
     return is_admin_user(user_id)
+
+
+def _clear_cancel_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("❌ Cancel clear request", callback_data="import_user|cancel_clear")]]
+    )
 
 
 async def import_user(update, context):
@@ -41,18 +55,40 @@ async def import_user_callback(update, context):
         return
     await query.answer()
 
-    if not _is_admin(update.effective_user.id if update.effective_user else None):
+    user_id = update.effective_user.id if update.effective_user else None
+    if not _is_admin(user_id):
         await reply(update, "❌ You are not authorized to manage imports.")
         return
 
     _, action = query.data.split("|", 1)
-    if action in {"import", "clear"}:
+
+    if action == "import":
         reset_session(context, mode="IMPORT_USER")
         context.user_data["import_clear"] = True
         await reply(
             update,
             "📥 Send the CSV file to import users. Existing users and medical records will be cleared before import.",
         )
+        return
+
+    if action == "clear":
+        approval_count = register_clear_database_approval(user_id, window_minutes=CLEAR_CONFIRM_WINDOW_MINUTES)
+        if approval_count < 2:
+            await reply(
+                update,
+                "⚠️ Clear request recorded.\n"
+                "A second different admin must also press '🧹 Clear database' within "
+                f"{CLEAR_CONFIRM_WINDOW_MINUTES} minutes to execute full wipe.",
+                reply_markup=_clear_cancel_keyboard(),
+            )
+            return
+
+        await _clear_database_now(update)
+        return
+
+    if action == "cancel_clear":
+        clear_database_approvals()
+        await reply(update, "❌ Clear-database request cancelled.")
         return
 
     if action == "list":
@@ -67,6 +103,21 @@ async def import_user_callback(update, context):
         if len(users) >= 200:
             lines.append("\nShowing first 200 users.")
         await reply(update, "\n".join(lines))
+
+
+async def _clear_database_now(update):
+    cleared = clear_all_data()
+    clear_database_approvals()
+    await reply(
+        update,
+        "✅ Database fully cleared after 2-admin confirmation.\n\n"
+        f"Users: {cleared['users']}\n"
+        f"Medical events: {cleared['medical_events']}\n"
+        f"Medical statuses: {cleared['medical_statuses']}\n"
+        f"Movement logs: {cleared['movement_logs']}\n"
+        f"SFT sessions: {cleared['sft_sessions']}\n"
+        f"SFT submissions: {cleared['sft_submissions']}",
+    )
 
 
 async def import_user_document(update, context):

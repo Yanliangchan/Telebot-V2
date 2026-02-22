@@ -83,7 +83,7 @@ class SFTSession(Base):
     created_at = Column(DateTime, default=now_sg)
 
     submissions = relationship("SFTSubmission", back_populates="session", cascade="all, delete-orphan")
-
+    
 
 class SFTSubmission(Base):
     __tablename__ = "sft_submissions"
@@ -100,3 +100,12 @@ class SFTSubmission(Base):
 
     session = relationship("SFTSession", back_populates="submissions")
     user = relationship("User", back_populates="sft_submissions")
+
+
+class AdminApproval(Base):
+    __tablename__ = "admin_approvals"
+
+    id = Column(Integer, primary_key=True)
+    action = Column(String, nullable=False, index=True)
+    admin_telegram_id = Column(BigInteger, nullable=False, index=True)
+    created_at = Column(DateTime, default=now_sg, index=True)
