@@ -83,7 +83,7 @@ class SFTSession(Base):
     created_at = Column(DateTime, default=now_sg)
 
     submissions = relationship("SFTSubmission", back_populates="session", cascade="all, delete-orphan")
-
+    
 
 class SFTSubmission(Base):
     __tablename__ = "sft_submissions"
