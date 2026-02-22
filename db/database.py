@@ -17,7 +17,6 @@ elif DATABASE_URL.startswith("postgresql://") and "+psycopg2" not in DATABASE_UR
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
-    # Railway plans are usually connection-constrained; keep defaults small.
     pool_size=int(os.getenv("DB_POOL_SIZE", "2")),
     max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "2")),
     pool_recycle=int(os.getenv("DB_POOL_RECYCLE_SECONDS", "1800")),
