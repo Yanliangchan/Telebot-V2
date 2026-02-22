@@ -1,6 +1,7 @@
 from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import func
+from sqlalchemy import text
 
 from db.database import SessionLocal, session_scope
 from db.models import AdminApproval, MedicalEvent, MedicalStatus, MovementLog, SFTSession, SFTSubmission, User
@@ -96,10 +97,13 @@ def create_user(
 
 def clear_user_data() -> dict[str, int]:
     with session_scope() as session:
+        # Remove SFT submissions first because they reference users.
+        sft_submissions_deleted = session.query(SFTSubmission).delete(synchronize_session=False)
         statuses_deleted = session.query(MedicalStatus).delete(synchronize_session=False)
         events_deleted = session.query(MedicalEvent).delete(synchronize_session=False)
         users_deleted = session.query(User).delete(synchronize_session=False)
     return {
+        "sft_submissions": sft_submissions_deleted,
         "medical_statuses": statuses_deleted,
         "medical_events": events_deleted,
         "users": users_deleted,
@@ -107,21 +111,26 @@ def clear_user_data() -> dict[str, int]:
 
 
 def clear_all_data() -> dict[str, int]:
+    clear_targets = [
+        (AdminApproval.__tablename__, "admin_approvals", AdminApproval),
+        (SFTSubmission.__tablename__, "sft_submissions", SFTSubmission),
+        (SFTSession.__tablename__, "sft_sessions", SFTSession),
+        (MovementLog.__tablename__, "movement_logs", MovementLog),
+        (MedicalStatus.__tablename__, "medical_statuses", MedicalStatus),
+        (MedicalEvent.__tablename__, "medical_events", MedicalEvent),
+        (User.__tablename__, "users", User),
+    ]
+
     with session_scope() as session:
-        submissions_deleted = session.query(SFTSubmission).delete(synchronize_session=False)
-        sessions_deleted = session.query(SFTSession).delete(synchronize_session=False)
-        movement_logs_deleted = session.query(MovementLog).delete(synchronize_session=False)
-        statuses_deleted = session.query(MedicalStatus).delete(synchronize_session=False)
-        events_deleted = session.query(MedicalEvent).delete(synchronize_session=False)
-        users_deleted = session.query(User).delete(synchronize_session=False)
-    return {
-        "sft_submissions": submissions_deleted,
-        "sft_sessions": sessions_deleted,
-        "movement_logs": movement_logs_deleted,
-        "medical_statuses": statuses_deleted,
-        "medical_events": events_deleted,
-        "users": users_deleted,
-    }
+        counts = {
+            key: int(session.query(func.count()).select_from(model).scalar() or 0)
+            for _, key, model in clear_targets
+        }
+
+        table_sql = ", ".join(table_name for table_name, _, _ in clear_targets)
+        session.execute(text(f"TRUNCATE TABLE {table_sql} RESTART IDENTITY CASCADE"))
+
+    return counts
 
 
 def list_users(limit: int = 200) -> list[User]:

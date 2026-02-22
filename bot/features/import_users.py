@@ -161,7 +161,8 @@ async def _handle_import_csv(update, context, clear_first: bool):
             "🧹 Cleared existing data: "
             f"{cleared['users']} users, "
             f"{cleared['medical_events']} medical events, "
-            f"{cleared['medical_statuses']} medical statuses.",
+            f"{cleared['medical_statuses']} medical statuses, "
+            f"{cleared['sft_submissions']} SFT submissions.",
         )
 
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:

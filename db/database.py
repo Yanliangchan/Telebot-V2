@@ -17,9 +17,10 @@ elif DATABASE_URL.startswith("postgresql://") and "+psycopg2" not in DATABASE_UR
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
-    pool_size=int(os.getenv("DB_POOL_SIZE", "5")),
-    max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "10")),
+    pool_size=int(os.getenv("DB_POOL_SIZE", "2")),
+    max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "2")),
     pool_recycle=int(os.getenv("DB_POOL_RECYCLE_SECONDS", "1800")),
+    pool_use_lifo=True,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, expire_on_commit=False)
