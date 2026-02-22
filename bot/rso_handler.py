@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import TelegramError
 from telegram.ext import CallbackContext
 
 
@@ -161,7 +162,7 @@ async def send_to_ic_group(update: Update, context: CallbackContext, message: st
         text=message,
         message_thread_id=PARADE_STATE_TOPIC_ID,
     )
-    await notify_admins(context, "Status update sent to IC group:\n\n" + message)
+    await notify_admins(update, context, message, destination_label="IC parade thread")
 
 async def send_to_cadet_chat(update: Update, context: CallbackContext, message: str):
     await context.bot.send_message(
@@ -170,9 +171,27 @@ async def send_to_cadet_chat(update: Update, context: CallbackContext, message: 
     )
 
 
-async def notify_admins(context: CallbackContext, message: str):
+def _actor_label(update: Update | None) -> str:
+    actor = update.effective_user if update else None
+    if not actor:
+        return "Unknown user"
+    if actor.username:
+        return f"@{actor.username}"
+    return actor.full_name
+
+
+async def notify_admins(update: Update, context: CallbackContext, message: str, destination_label: str):
+    actor = _actor_label(update)
+    payload = f"🔔 Status update by {actor} sent to {destination_label}:\n\n{message}"
+    sender_id = update.effective_user.id if update and update.effective_user else None
+
     for admin_id in get_all_admin_user_ids():
-        await context.bot.send_message(chat_id=admin_id, text=message)
+        if sender_id and admin_id == sender_id:
+            continue
+        try:
+            await context.bot.send_message(chat_id=admin_id, text=payload)
+        except TelegramError:
+            continue
 
 
 # ------------ Common Handlers for RSO, RSI and MA ------------ #
