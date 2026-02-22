@@ -1,25 +1,14 @@
-from email.mime import application
 from config.settings import BOT_TOKEN
 from config.constants import IC_GROUP_CHAT_ID
 from services.db_service import DatabaseService
 
-from bot.commands import (
-    start,
-    start_sft,
-    quit_sft,
-    start_movement,
-    start_status,
-    start_parade_state,
-    import_user,
-    import_user_document,
-    import_user_callback,
-)
-
-from bot.callbacks import (
-    callback_router,
-    text_input_router,
-    register_status_handlers,
-)
+from bot.features.import_users import import_user, import_user_callback, import_user_document
+from bot.features.movement import start_movement
+from bot.features.parade import start_parade_state
+from bot.features.sft import quit_sft, start_sft
+from bot.features.start import start
+from bot.features.status import start_status
+from bot.router import callback_router, register_status_handlers, text_input_router
 
 from bot.cet import cet_handler
 from bot.daily_msg import send_daily_msg
