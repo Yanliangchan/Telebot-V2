@@ -5,6 +5,7 @@ Use feature modules in ``bot.features`` for new code.
 
 from bot.features.import_users import import_user, import_user_callback, import_user_document
 from bot.features.movement import start_movement
+from bot.features.notifications import notifications
 from bot.features.parade import start_parade_state
 from bot.features.sft import quit_sft, start_sft
 from bot.features.start import start
@@ -16,6 +17,7 @@ __all__ = [
     "quit_sft",
     "start_movement",
     "start_status",
+    "notifications",
     "start_parade_state",
     "import_user",
     "import_user_document",
