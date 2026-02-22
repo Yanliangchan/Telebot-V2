@@ -19,6 +19,7 @@ from db.crud import (
     get_all_instructor_names,
 )
 
+from bot.features.notifications import admin_wants_status_notifications
 from bot.helpers import reply
 from services.auth_service import get_all_admin_user_ids
 
@@ -187,6 +188,8 @@ async def notify_admins(update: Update, context: CallbackContext, message: str, 
 
     for admin_id in get_all_admin_user_ids():
         if sender_id and admin_id == sender_id:
+            continue
+        if not admin_wants_status_notifications(context, admin_id):
             continue
         try:
             await context.bot.send_message(chat_id=admin_id, text=payload)
