@@ -21,6 +21,7 @@ from db.crud import (
 from bot.helpers import reply
 
 from config.constants import IC_GROUP_CHAT_ID, PARADE_STATE_TOPIC_ID, CADET_CHAT_ID
+from utils.input_normalizers import to_ddmmyy, to_hhmm
 
 # ------------ Common Utility Functions ------------ #
 
@@ -74,6 +75,14 @@ def pending_update_exists(context: CallbackContext, record_id: int | None, modes
         if report.get("record_id") == record_id and report.get("mode") in modes:
             return True
     return False
+
+
+def mark_action_once(context: CallbackContext, action_key: str) -> bool:
+    completed = context.user_data.setdefault("completed_actions", set())
+    if action_key in completed:
+        return False
+    completed.add(action_key)
+    return True
 
 
 def format_pending_reports(reports: list[dict], mode: str) -> str:
@@ -380,7 +389,8 @@ async def manual_input_handler(update: Update, context: CallbackContext):
             context.user_data['awaiting_location'] = True
             await reply(
                 update,
-                f"Appointment recorded: {user_input.upper()}.\n\nPlease enter the location of your appointment."
+                f"Step 1/4 complete. Appointment recorded: {user_input.upper()}.\n\n"
+                "Step 2/4: Please enter the location of your appointment."
             )
             return
 
@@ -398,77 +408,46 @@ async def manual_input_handler(update: Update, context: CallbackContext):
             context.user_data['awaiting_date'] = True
             await reply(
                 update,
-                f"Location recorded: {user_input.upper()}.\n\nPlease enter your appointment date in DDMMYY format."
+                f"Step 2/4 complete. Location recorded: {user_input.upper()}.\n\n"
+                "Step 3/4: Please enter your appointment date in DDMMYY or YYYY-MM-DD format."
             )
             return
 
         if context.user_data.get("awaiting_date"):
-            # Validate date: must be in DDMMYY format and valid
-            if len(user_input) != 6 or not user_input.isdigit():
-                await reply(update, "Date must be in DDMMYY format (6 digits). Please try again.")
-                return
-
             try:
-                day = int(user_input[0:2])
-                month = int(user_input[2:4])
-                year = int(user_input[4:6])
-
-                # Basic validation
-                if not (1 <= day <= 31):
-                    await reply(update, "Invalid day. Please enter a valid date in DDMMYY format.")
-                    return
-                if not (1 <= month <= 12):
-                    await reply(update, "Invalid month. Please enter a valid date in DDMMYY format.")
-                    return
-
-                # Try to parse the date to ensure it's valid
-                appointment_date = datetime.strptime(user_input, "%d%m%y").date()
+                normalized_date = to_ddmmyy(user_input)
+                appointment_date = datetime.strptime(normalized_date, "%d%m%y").date()
 
                 # Check if date is in the past
                 if appointment_date < datetime.now().date():
                     await reply(update, "Appointment date cannot be in the past. Please enter a future date.")
                     return
             except ValueError:
-                await reply(update, "Invalid date. Please enter a valid date in DDMMYY format.")
+                await reply(update, "Invalid date. Use DDMMYY or YYYY-MM-DD.")
                 return
 
-            context.user_data['appointment_date'] = user_input.upper()
+            context.user_data['appointment_date'] = normalized_date
             context.user_data['awaiting_date'] = False
             context.user_data['awaiting_time'] = True
             await reply(
                 update,
-                f"Appointment date recorded: {user_input.upper()}.\n\nPlease enter your appointment time in HHMM and 24H format."
+                f"Step 3/4 complete. Appointment date recorded: {context.user_data['appointment_date']}.\n\n"
+                "Step 4/4: Please enter your appointment time in HHMM or HH:MM (24H)."
             )
             return
 
         if context.user_data.get("awaiting_time"):
-            # Validate time: must be in HHMM format (24-hour)
-            if len(user_input) != 4 or not user_input.isdigit():
-                await reply(update, "Time must be in HHMM format (4 digits, 24-hour). Please try again.")
-                return
-
             try:
-                hours = int(user_input[0:2])
-                minutes = int(user_input[2:4])
-
-                if not (0 <= hours <= 23):
-                    await reply(update, "Invalid hour (must be 00-23). Please enter a valid time in HHMM format.")
-                    return
-                if not (0 <= minutes <= 59):
-                    await reply(update, "Invalid minutes (must be 00-59). Please enter a valid time in HHMM format.")
-                    return
-
-                # Try to parse to ensure valid
-                datetime.strptime(user_input, "%H%M")
+                normalized_time = to_hhmm(user_input)
             except ValueError:
-                await reply(update, "Invalid time. Please enter a valid time in HHMM format (24-hour).")
+                await reply(update, "Invalid time. Use HHMM or HH:MM (24-hour).")
                 return
 
-            context.user_data['appointment_time'] = user_input.upper()
+            context.user_data['appointment_time'] = normalized_time
             context.user_data['awaiting_time'] = False
             await reply(
                 update,
-                f"Appointment time recorded: {user_input.upper()}."
+                f"Step 4/4 complete. Appointment time recorded: {context.user_data['appointment_time']}."
             )
             await show_ma_preview_summary(update, context)
             return
@@ -521,7 +500,7 @@ async def manual_input_handler(update: Update, context: CallbackContext):
             return
 
 async def start_status_report(update: Update, context: CallbackContext):
-    await prompt_name_selection(update, context, "report", "Select your name:", "name")
+    await prompt_name_selection(update, context, "report", "Step 1/3: Select your name:", "name")
 
 # ------------ RSO Handlers and Functions ------------ #
 async def start_update_status(update: Update, context: CallbackContext):
@@ -530,7 +509,7 @@ async def start_update_status(update: Update, context: CallbackContext):
         update,
         context,
         "update",
-        "Select your name to update your status report:",
+        "Step 1/3: Select your name to update your status report:",
         "update_name"
     )
 
@@ -547,7 +526,7 @@ async def show_mc_days_buttons(update: Update, context: CallbackContext):
     ]
     await reply(
         update,
-        "How many days of MC have you gotten?",
+        "Step 3/3: How many days of MC have you gotten?",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -615,6 +594,9 @@ async def confirm_handler(update: Update, context: CallbackContext):
     if not query:
         return
     await query.answer()
+    if not mark_action_once(context, "confirm_rso"):
+        await reply(update, "ℹ️ This report was already confirmed.")
+        return
 
     name = context.user_data.get('name', 'N/A')
     symptoms = context.user_data.get('symptoms', '')
@@ -753,7 +735,7 @@ async def cancel_batch_send_handler(update: Update, context: CallbackContext):
 # ------------ MA Handlers and Functions ------------ #
 
 async def start_ma_report(update: Update, context: CallbackContext):
-    await prompt_name_selection(update, context, "ma_report", "Select your name for MA report:", "name")
+    await prompt_name_selection(update, context, "ma_report", "Step 1/4: Select your name for MA report:", "name")
 
 async def show_ma_preview_summary(update: Update, context: CallbackContext):
     name = context.user_data.get('name', 'N/A')
@@ -786,6 +768,9 @@ async def confirm_ma_handler(update: Update, context: CallbackContext):
     if not query:
         return
     await query.answer()
+    if not mark_action_once(context, "confirm_ma"):
+        await reply(update, "ℹ️ This MA report was already confirmed.")
+        return
 
     name = context.user_data.get('name', 'N/A')
     appointment = context.user_data.get('appointment', 'N/A')
@@ -822,7 +807,7 @@ async def confirm_ma_handler(update: Update, context: CallbackContext):
 
 async def update_endorsed(update: Update, context: CallbackContext):
     """Start the update endorsed process - select name first"""
-    await prompt_name_selection(update, context, "update_ma", "Select your name to update MA endorsement:", "update_ma_name")
+    await prompt_name_selection(update, context, "update_ma", "Step 1/2: Select your name to update MA endorsement:", "update_ma_name")
 
 async def instructor_selection_handler(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -866,6 +851,9 @@ async def confirm_ma_update_handler(update: Update, context: CallbackContext):
     if not query:
         return
     await query.answer()
+    if not mark_action_once(context, "confirm_ma_update"):
+        await reply(update, "ℹ️ This MA update was already confirmed.")
+        return
 
     name = context.user_data.get('name', 'N/A')
     appointment = context.user_data.get('appointment', 'N/A')
@@ -907,10 +895,10 @@ async def confirm_ma_update_handler(update: Update, context: CallbackContext):
 # ------------ RSI Handlers and Functions ------------ #
 
 async def start_rsi_report(update: Update, context: CallbackContext):
-    await prompt_name_selection(update, context, "rsi_report", "Select your name to report RSI:", "rsi_name")
+    await prompt_name_selection(update, context, "rsi_report", "Step 1/3: Select your name to report RSI:", "rsi_name")
 
 async def start_update_rsi(update: Update, context: CallbackContext):
-    await prompt_name_selection(update, context, "rsi_update", "Select your name to update RSI status:", "rsi_update_name")
+    await prompt_name_selection(update, context, "rsi_update", "Step 1/3: Select your name to update RSI status:", "rsi_update_name")
 
 async def show_rsi_days_buttons(update: Update, context: CallbackContext):
     keyboard = [
@@ -1029,6 +1017,9 @@ async def confirm_rsi_report_handler(update: Update, context: CallbackContext):
     if not query:
         return
     await query.answer()
+    if not mark_action_once(context, "confirm_rsi_report"):
+        await reply(update, "ℹ️ This RSI report was already confirmed.")
+        return
 
     name = context.user_data.get("name", "N/A")
     symptoms = context.user_data.get("symptoms", "")
@@ -1059,6 +1050,9 @@ async def confirm_rsi_update_handler(update: Update, context: CallbackContext):
     if not query:
         return
     await query.answer()
+    if not mark_action_once(context, "confirm_rsi_update"):
+        await reply(update, "ℹ️ This RSI update was already confirmed.")
+        return
 
     record_id = context.user_data.get("record_id")
     diagnosis = context.user_data.get("diagnosis", "")
@@ -1106,4 +1100,3 @@ async def confirm_rsi_update_handler(update: Update, context: CallbackContext):
 
 # def update_rsi_command(update: Update, context: CallbackContext):
 #     start_update_rsi(update, context)
-
