@@ -3,7 +3,7 @@ from datetime import date, datetime, time
 from sqlalchemy import func
 
 from db.database import SessionLocal, session_scope
-from db.models import MedicalEvent, MedicalStatus, MovementLog, SFTSession, SFTSubmission, User
+from db.models import MedicalEvent, MedicalStatus, SFTSession, SFTSubmission, User
 from utils.datetime_utils import SG_TZ, now_sg
 
 
@@ -72,24 +72,6 @@ def clear_user_data() -> dict[str, int]:
         events_deleted = session.query(MedicalEvent).delete(synchronize_session=False)
         users_deleted = session.query(User).delete(synchronize_session=False)
     return {
-        "medical_statuses": statuses_deleted,
-        "medical_events": events_deleted,
-        "users": users_deleted,
-    }
-
-
-def clear_all_data() -> dict[str, int]:
-    with session_scope() as session:
-        submissions_deleted = session.query(SFTSubmission).delete(synchronize_session=False)
-        sessions_deleted = session.query(SFTSession).delete(synchronize_session=False)
-        movement_logs_deleted = session.query(MovementLog).delete(synchronize_session=False)
-        statuses_deleted = session.query(MedicalStatus).delete(synchronize_session=False)
-        events_deleted = session.query(MedicalEvent).delete(synchronize_session=False)
-        users_deleted = session.query(User).delete(synchronize_session=False)
-    return {
-        "sft_submissions": submissions_deleted,
-        "sft_sessions": sessions_deleted,
-        "movement_logs": movement_logs_deleted,
         "medical_statuses": statuses_deleted,
         "medical_events": events_deleted,
         "users": users_deleted,
