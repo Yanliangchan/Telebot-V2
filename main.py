@@ -3,6 +3,7 @@ from config.constants import IC_GROUP_CHAT_ID
 from services.db_service import DatabaseService
 
 from bot.features.import_users import import_user, import_user_callback, import_user_document
+from bot.features.debug import debug_ids
 from bot.features.movement import start_movement
 from bot.features.parade import start_parade_state
 from bot.features.sft import quit_sft, start_sft
@@ -64,6 +65,7 @@ def main():
     application.add_handler(CommandHandler("pt_sft_admin", start_pt_admin))
     application.add_handler(CommandHandler("start_parade_state", start_parade_state))
     application.add_handler(CommandHandler("import_user", import_user))
+    application.add_handler(CommandHandler("debug_ids", debug_ids))
     register_status_handlers(application)
 
 
