@@ -19,6 +19,7 @@ from db.crud import (
 )
 
 from bot.helpers import reply
+from services.auth_service import get_all_admin_user_ids
 
 from config.constants import IC_GROUP_CHAT_ID, PARADE_STATE_TOPIC_ID, CADET_CHAT_ID
 from utils.input_normalizers import to_ddmmyy, to_hhmm
@@ -160,12 +161,18 @@ async def send_to_ic_group(update: Update, context: CallbackContext, message: st
         text=message,
         message_thread_id=PARADE_STATE_TOPIC_ID,
     )
+    await notify_admins(context, "Status update sent to IC group:\n\n" + message)
 
 async def send_to_cadet_chat(update: Update, context: CallbackContext, message: str):
     await context.bot.send_message(
         chat_id=CADET_CHAT_ID,
         text=message,
     )
+
+
+async def notify_admins(context: CallbackContext, message: str):
+    for admin_id in get_all_admin_user_ids():
+        await context.bot.send_message(chat_id=admin_id, text=message)
 
 
 # ------------ Common Handlers for RSO, RSI and MA ------------ #
