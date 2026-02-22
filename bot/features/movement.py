@@ -20,7 +20,8 @@ async def start_movement(update, context):
 
     await reply(
         update,
-        "🚶 *Movement reporting started*\n\nSelect personnel:",
+        "🚶 *Movement reporting started*\n"
+        "Step 1/4: Select personnel.",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown",
     )
@@ -63,13 +64,17 @@ async def handle_movement_callbacks(update, context):
             await reply(update, "❌ Please select at least one cadet.")
             return
         context.user_data["awaiting_from"] = True
-        await reply(update, "📍 Where are they moving from?", reply_markup=_location_keyboard("mov:from"))
+        keyboard = _location_keyboard("mov:from")
+        keyboard.inline_keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="mov:back|names")])
+        await reply(update, "Step 2/4: 📍 Where are they moving from?", reply_markup=keyboard)
         return
 
     if data.startswith("mov:from|"):
         _, from_loc = data.split("|", 1)
         context.user_data.update({"from": from_loc, "awaiting_from": False, "awaiting_to": True})
-        await reply(update, "📍 Where are they moving to?", reply_markup=_location_keyboard("mov:to"))
+        keyboard = _location_keyboard("mov:to")
+        keyboard.inline_keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="mov:back|from")])
+        await reply(update, "Step 3/4: 📍 Where are they moving to?", reply_markup=keyboard)
         return
 
     if data.startswith("mov:to|"):
@@ -81,13 +86,33 @@ async def handle_movement_callbacks(update, context):
         keyboard = [
             [InlineKeyboardButton("🕒 Use current time", callback_data="mov:time|now")],
             [InlineKeyboardButton("✍️ Enter time manually", callback_data="mov:time|manual")],
+            [InlineKeyboardButton("⬅️ Back", callback_data="mov:back|to")],
         ]
-        await reply(update, "⏰ Select the time:", reply_markup=InlineKeyboardMarkup(keyboard))
+        await reply(update, "Step 4/4: ⏰ Select the time:", reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+
+    if data == "mov:back|names":
+        context.user_data.update({"awaiting_from": False, "awaiting_to": False, "awaiting_time": False})
+        await reply(update, "Step 1/4: Select personnel.", reply_markup=_movement_keyboard(context))
+        return
+
+    if data == "mov:back|from":
+        context.user_data.update({"awaiting_to": False, "awaiting_from": True})
+        keyboard = _location_keyboard("mov:from")
+        keyboard.inline_keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="mov:back|names")])
+        await reply(update, "Step 2/4: 📍 Where are they moving from?", reply_markup=keyboard)
+        return
+
+    if data == "mov:back|to":
+        context.user_data.update({"awaiting_time": False, "awaiting_to": True})
+        keyboard = _location_keyboard("mov:to")
+        keyboard.inline_keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="mov:back|from")])
+        await reply(update, "Step 3/4: 📍 Where are they moving to?", reply_markup=keyboard)
         return
 
     if data == "mov:time|manual":
         context.user_data["awaiting_time"] = True
-        await reply(update, "⏰ Enter time manually (HHMM).")
+        await reply(update, "Step 4/4: ⏰ Enter time manually (HHMM or HH:MM).")
         return
 
     if data == "mov:time|now":
@@ -100,11 +125,15 @@ async def handle_movement_callbacks(update, context):
         return
 
     if data == "mov:confirm":
+        if context.user_data.get("movement_sent"):
+            await reply(update, "ℹ️ Movement report already sent.")
+            return
         msg = context.user_data.get("final_message")
         if not msg:
             await reply(update, "❌ No movement data found.")
             return
 
+        context.user_data["movement_sent"] = True
         await context.bot.send_message(chat_id=IC_GROUP_CHAT_ID, message_thread_id=MOVEMENT_TOPIC_ID, text=msg)
         for admin in get_all_admin_user_ids():
             await context.bot.send_message(chat_id=admin, text="Movement report sent:\n\n" + msg)
@@ -150,8 +179,9 @@ async def movement_text_input(update, context):
         return
 
     if context.user_data.get("awaiting_time"):
+        value = value.replace(":", "")
         if not is_valid_24h_time(value):
-            await reply(update, "❌ Invalid time format (HHMM).")
+            await reply(update, "❌ Invalid time format (use HHMM or HH:MM).")
             return
         context.user_data["awaiting_time"] = False
         await _prepare_movement_preview(update, context, value)

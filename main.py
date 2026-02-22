@@ -4,10 +4,11 @@ from services.db_service import DatabaseService
 
 from bot.features.import_users import import_user, import_user_callback, import_user_document
 from bot.features.debug import debug_ids
+from bot.features.navigation import cancel, menu
 from bot.features.movement import start_movement
 from bot.features.parade import start_parade_state
 from bot.features.sft import quit_sft, start_sft
-from bot.features.start import start
+from bot.features.start import start, start_menu_callback
 from bot.features.status import start_status
 from bot.router import callback_router, register_status_handlers, text_input_router
 
@@ -66,6 +67,8 @@ def main():
     application.add_handler(CommandHandler("start_parade_state", start_parade_state))
     application.add_handler(CommandHandler("import_user", import_user))
     application.add_handler(CommandHandler("debug_ids", debug_ids))
+    application.add_handler(CommandHandler("menu", menu))
+    application.add_handler(CommandHandler("cancel", cancel))
     register_status_handlers(application)
 
 
@@ -74,6 +77,9 @@ def main():
     # -----------------------------
     application.add_handler(
         CallbackQueryHandler(handle_pt_admin_callbacks, pattern=r"^ptadmin:")
+    )
+    application.add_handler(
+        CallbackQueryHandler(start_menu_callback, pattern=r"^start_menu\|")
     )
     application.add_handler(
         CallbackQueryHandler(callback_router, pattern=r"^(mov|sft|parade)")

@@ -5,6 +5,7 @@ from sqlalchemy import text
 
 from db.database import SessionLocal, session_scope
 from db.models import AdminApproval, MedicalEvent, MedicalStatus, MovementLog, SFTSession, SFTSubmission, User
+from utils.input_normalizers import parse_date_flexible, parse_time_flexible
 from utils.datetime_utils import SG_TZ, now_sg
 
 
@@ -250,8 +251,8 @@ def update_user_record(record_id: int, symptoms: str, diagnosis: str, status: st
                 user_id=record.user_id,
                 status_type="MC",
                 description=status,
-                start_date=datetime.strptime(start_date, "%d%m%y").date(),
-                end_date=datetime.strptime(end_date, "%d%m%y").date(),
+                start_date=parse_date_flexible(start_date),
+                end_date=parse_date_flexible(end_date),
                 source_event_id=record.id,
             )
         )
@@ -308,8 +309,8 @@ def create_ma_record(name: str, appointment: str, appointment_location: str, app
             raise ValueError("User not found")
 
         appointment_dt = datetime.combine(
-            datetime.strptime(appointment_date, "%d%m%y").date(),
-            datetime.strptime(appointment_time, "%H%M").time(),
+            parse_date_flexible(appointment_date),
+            parse_time_flexible(appointment_time),
             tzinfo=SG_TZ,
         )
         event = MedicalEvent(
@@ -333,8 +334,8 @@ def update_ma_record(record_id: int, appointment: str, appointment_location: str
         record.appointment_type = appointment
         record.location = appointment_location
         record.event_datetime = datetime.combine(
-            datetime.strptime(appointment_date, "%d%m%y").date(),
-            datetime.strptime(appointment_time, "%H%M").time(),
+            parse_date_flexible(appointment_date),
+            parse_time_flexible(appointment_time),
             tzinfo=SG_TZ,
         )
         if instructor:
@@ -395,8 +396,8 @@ def update_rsi_record(record_id: int, diagnosis: str, status_type: str, status: 
                     user_id=record.user_id,
                     status_type=status_type,
                     description=status,
-                    start_date=datetime.strptime(start_date, "%d%m%y").date(),
-                    end_date=datetime.strptime(end_date, "%d%m%y").date(),
+                    start_date=parse_date_flexible(start_date),
+                    end_date=parse_date_flexible(end_date),
                     source_event_id=record.id,
                 )
             )
