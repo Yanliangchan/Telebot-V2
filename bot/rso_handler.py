@@ -23,7 +23,7 @@ from bot.features.notifications import admin_wants_status_notifications
 from bot.helpers import reply
 from services.auth_service import get_all_admin_user_ids
 
-from config.constants import IC_GROUP_CHAT_ID, PARADE_STATE_TOPIC_ID, CADET_CHAT_ID
+from config.constants import IC_GROUP_CHAT_ID, PARADE_STATE_TOPIC_ID, CADET_CHAT_ID, GENERAL_TOPIC_ID
 from utils.input_normalizers import to_ddmmyy, to_hhmm
 
 # ------------ Common Utility Functions ------------ #
@@ -163,7 +163,124 @@ async def send_to_ic_group(update: Update, context: CallbackContext, message: st
         text=message,
         message_thread_id=PARADE_STATE_TOPIC_ID,
     )
-    await notify_admins(update, context, message, destination_label="IC parade thread")
+    if update:
+        await notify_admins(update, context, message, destination_label="IC parade thread")
+
+
+def _next_rso_approval_id(context: CallbackContext) -> int:
+    next_id = context.bot_data.get("rso_approval_next_id", 1)
+    context.bot_data["rso_approval_next_id"] = next_id + 1
+    return next_id
+
+
+def _build_rso_permission_message(reports: list[dict]) -> str:
+    lines = []
+    for report in reports:
+        cadet_name = report.get("name", "Unknown cadet")
+        symptoms = report.get("symptoms", "unspecified symptoms")
+        lines.append(
+            f"Good after Sir/Mdm, {cadet_name}, is having {symptoms} and is requesting permission to report sick."
+        )
+    return "\n".join(lines)
+
+
+async def _notify_admins_rso_approval(context: CallbackContext, approver_label: str, summary: str):
+    payload = (
+        f"✅ RSO permission approved by {approver_label}.\n\n"
+        f"The following report has been sent to Parade State:\n\n{summary}"
+    )
+    for admin_id in get_all_admin_user_ids():
+        if not admin_wants_status_notifications(context, admin_id):
+            continue
+        try:
+            await context.bot.send_message(chat_id=admin_id, text=payload)
+        except TelegramError:
+            continue
+
+
+async def request_rso_permission_handler(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()
+
+    reports = context.user_data.get("last_batch_reports")
+    summary = context.user_data.get("last_batch_summary")
+    if not reports or not summary:
+        await reply(update, "No RSO batch found to request approval for.")
+        return
+
+    approval_id = _next_rso_approval_id(context)
+    context.bot_data.setdefault("pending_rso_approvals", {})[approval_id] = {
+        "reports": reports,
+        "summary": summary,
+        "requester_id": update.effective_user.id if update.effective_user else None,
+        "resolved": False,
+    }
+
+    permission_text = _build_rso_permission_message(reports)
+    keyboard = InlineKeyboardMarkup(
+        [[
+            InlineKeyboardButton("Approve", callback_data=f"rso_approval|{approval_id}|approve"),
+            InlineKeyboardButton("Reject", callback_data=f"rso_approval|{approval_id}|reject"),
+        ]]
+    )
+    await context.bot.send_message(
+        chat_id=IC_GROUP_CHAT_ID,
+        message_thread_id=GENERAL_TOPIC_ID,
+        text=permission_text,
+        reply_markup=keyboard,
+    )
+    context.user_data.clear()
+    await reply(update, "✅ Permission request sent to General topic for approval.")
+
+
+async def rso_approval_decision_handler(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()
+
+    _, approval_id_raw, decision = query.data.split("|", 2)
+    approval_id = int(approval_id_raw)
+    approvals = context.bot_data.get("pending_rso_approvals", {})
+    approval = approvals.get(approval_id)
+    if not approval:
+        await reply(update, "This approval request is no longer available.")
+        return
+    if approval.get("resolved"):
+        await reply(update, "This RSO approval request has already been handled.")
+        return
+
+    approval["resolved"] = True
+    requester_id = approval.get("requester_id")
+    summary = approval.get("summary", "")
+
+    if decision == "reject":
+        if requester_id:
+            try:
+                await context.bot.send_message(
+                    chat_id=requester_id,
+                    text="❌ Your RSO request was rejected.",
+                )
+            except TelegramError:
+                pass
+        await reply(update, "❌ RSO request rejected.")
+        return
+
+    persist_pending_reports(approval.get("reports", []))
+    await send_to_ic_group(update, context, summary)
+
+    approver = update.effective_user
+    approver_label = f"@{approver.username}" if approver and approver.username else (approver.full_name if approver else "Unknown user")
+    await _notify_admins_rso_approval(context, approver_label, summary)
+
+    if requester_id:
+        try:
+            await context.bot.send_message(
+                chat_id=requester_id,
+                text="✅ Your RSO is approved. Please update your status.",
+            )
+        except TelegramError:
+            pass
+
+    await reply(update, "✅ RSO approved and sent to Parade State.")
 
 async def send_to_cadet_chat(update: Update, context: CallbackContext, message: str):
     await context.bot.send_message(
@@ -710,10 +827,16 @@ async def done_reporting_handler(update: Update, context: CallbackContext):
     context.user_data.clear()
     context.user_data["last_batch_summary"] = summary
     context.user_data["last_batch_reports"] = reports
-    keyboard = [
-        [InlineKeyboardButton("📤 Send to IC Group", callback_data="send_batch_ic")],
-        [InlineKeyboardButton("Cancel", callback_data="cancel_batch_send")],
-    ]
+    if mode == "report":
+        keyboard = [
+            [InlineKeyboardButton("📨 Request RSO Permission", callback_data="request_rso_permission")],
+            [InlineKeyboardButton("Cancel", callback_data="cancel_batch_send")],
+        ]
+    else:
+        keyboard = [
+            [InlineKeyboardButton("📤 Send to IC Group", callback_data="send_batch_ic")],
+            [InlineKeyboardButton("Cancel", callback_data="cancel_batch_send")],
+        ]
     await reply(
         update,
         summary,
