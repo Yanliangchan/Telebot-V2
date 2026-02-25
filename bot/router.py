@@ -103,6 +103,8 @@ def register_status_handlers(dispatcher):
         rsi_days_button_handler,
         rsi_status_type_handler,
         send_batch_to_ic_handler,
+        request_rso_permission_handler,
+        rso_approval_decision_handler,
     )
 
     dispatcher.add_handler(CallbackQueryHandler(status_menu_handler, pattern=r"^status_menu\|"))
@@ -120,4 +122,6 @@ def register_status_handlers(dispatcher):
     dispatcher.add_handler(CallbackQueryHandler(continue_reporting_handler, pattern=r"^continue_reporting\|"))
     dispatcher.add_handler(CallbackQueryHandler(done_reporting_handler, pattern=r"^done_reporting$"))
     dispatcher.add_handler(CallbackQueryHandler(send_batch_to_ic_handler, pattern=r"^send_batch_ic$"))
+    dispatcher.add_handler(CallbackQueryHandler(request_rso_permission_handler, pattern=r"^request_rso_permission$"))
+    dispatcher.add_handler(CallbackQueryHandler(rso_approval_decision_handler, pattern=r"^rso_approval\|"))
     dispatcher.add_handler(CallbackQueryHandler(cancel_batch_send_handler, pattern=r"^cancel_batch_send$"))
